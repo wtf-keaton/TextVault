@@ -3,7 +3,9 @@ CREATE TABLE "User" (
     ID BIGINT PRIMARY KEY,
     Username VARCHAR(50) NOT NULL,
     Email VARCHAR(100) UNIQUE NOT NULL,
-    PasswordHash VARCHAR(255) NOT NULL
+    PasswordHash VARCHAR(255) NOT NULL,
+
+    UNIQUE (Username, Email)
 );
 
 CREATE INDEX idx_user_username ON "User" (Username);
