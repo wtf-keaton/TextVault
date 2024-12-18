@@ -1,6 +1,7 @@
 package router
 
 import (
+	"TextVault/internal/router/services/paste"
 	"TextVault/internal/router/services/user"
 	"TextVault/internal/storage/postgres"
 	"log"
@@ -11,17 +12,22 @@ import (
 type Router struct {
 	app *fiber.App
 
-	UserService *user.Service
+	UserService  *user.Service
+	PasteService *paste.Service
 }
 
 func New(storage *postgres.Storage) *Router {
-	app := fiber.New(fiber.Config{})
+	app := fiber.New(fiber.Config{
+		AppName: "TextVault API",
+	})
 
 	userService := user.New(storage, storage)
+	pasteService := paste.New(storage, storage)
 
 	return &Router{
-		app:         app,
-		UserService: userService,
+		app:          app,
+		UserService:  userService,
+		PasteService: pasteService,
 	}
 }
 
@@ -45,7 +51,6 @@ func (r *Router) MustRun() {
 	if err := r.run(); err != nil {
 		panic(err)
 	}
-
 }
 
 func (r *Router) run() error {
