@@ -16,7 +16,6 @@ CREATE TABLE "Paste" (
     Title VARCHAR(255) NOT NULL,
     Hash VARCHAR(64) UNIQUE NOT NULL,
     AuthorID BIGINT NOT NULL,
-    Content TEXT NOT NULL,
     FOREIGN KEY (AuthorID) REFERENCES "User"(ID)
 );
 
