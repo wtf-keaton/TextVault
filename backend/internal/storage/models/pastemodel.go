@@ -5,5 +5,4 @@ type Paste struct {
 	Title    string
 	Hash     string
 	AuthorID int64
-	Content  string
 }

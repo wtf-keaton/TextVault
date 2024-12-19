@@ -8,7 +8,7 @@ import (
 )
 
 type UserClaims struct {
-	ID    int    `json:"id"`
+	ID    int64  `json:"id"`
 	Email string `json:"email"`
 }
 
@@ -54,7 +54,7 @@ func ExtractUserClaims(token *jwt.Token) (*UserClaims, error) {
 	}
 
 	return &UserClaims{
-		ID:    int(id),
+		ID:    int64(id),
 		Email: email,
 	}, nil
 }

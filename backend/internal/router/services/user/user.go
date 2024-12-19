@@ -2,6 +2,7 @@ package user
 
 import (
 	"TextVault/internal/lib/jwt"
+	"TextVault/internal/middleware"
 	"TextVault/internal/storage/models"
 	"TextVault/pkg/passwordhash"
 	"context"
@@ -119,17 +120,7 @@ func (s *Service) Register(c *fiber.Ctx) error {
 }
 
 func (s *Service) ValidateToken(ctx *fiber.Ctx) error {
-	authHeader := ctx.Get("Authorization")
-
-	if authHeader == "" {
-		return fiber.NewError(fiber.StatusUnauthorized, "missing authorization header")
-	}
-
-	if len(authHeader) <= 7 || authHeader[:7] != "Bearer " {
-		return fiber.NewError(fiber.StatusUnauthorized, "invalid authorization format")
-	}
-
-	tokenString := authHeader[7:]
+	tokenString, _ := middleware.ExtractToken(ctx)
 
 	token, err := jwt.ValidateToken(tokenString)
 	if err != nil {

@@ -9,7 +9,8 @@ func (s *Storage) GetPaste(ctx context.Context, hash string) (*models.Paste, err
 	return nil, nil
 }
 
-func (s *Storage) SavePaste(ctx context.Context, paste *models.Paste) error {
+func (s *Storage) SavePaste(ctx context.Context, paste *models.Paste, content []byte) error {
+
 	return nil
 }
 

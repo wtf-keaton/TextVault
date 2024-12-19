@@ -1,16 +1,21 @@
 package cloud
 
 import (
+	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"log"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
+)
+
+var (
+	ErrEntityTooLarge = "EntityTooLarge"
 )
 
 type CloudStorage struct {
@@ -30,50 +35,61 @@ func New() (*CloudStorage, error) {
 	return &CloudStorage{S3Client: s3Client}, nil
 }
 
-func (c *CloudStorage) ListBuckets(ctx context.Context) ([]types.Bucket, error) {
-	var err error
-	var output *s3.ListBucketsOutput
-	var buckets []types.Bucket
-	bucketPaginator := s3.NewListBucketsPaginator(c.S3Client, &s3.ListBucketsInput{})
-	for bucketPaginator.HasMorePages() {
-		output, err = bucketPaginator.NextPage(ctx)
-		if err != nil {
-			var apiErr smithy.APIError
-			if errors.As(err, &apiErr) && apiErr.ErrorCode() == "AccessDenied" {
-				fmt.Println("You don't have permission to list buckets for this account.")
-				err = apiErr
-			} else {
-				log.Printf("Couldn't list buckets for your account. Here's why: %v\n", err)
-			}
-			break
-		} else {
-			buckets = append(buckets, output.Buckets...)
-		}
-	}
-	return buckets, err
-}
-
-func (c *CloudStorage) BucketExists(ctx context.Context, bucketName string) (bool, error) {
+func (c *CloudStorage) BucketExists(ctx context.Context) error {
 	_, err := c.S3Client.HeadBucket(ctx, &s3.HeadBucketInput{
-		Bucket: aws.String(bucketName),
+		Bucket: aws.String("textvault"),
 	})
-	exists := true
+
 	if err != nil {
 		var apiError smithy.APIError
 		if errors.As(err, &apiError) {
 			switch apiError.(type) {
 			case *types.NotFound:
-				log.Printf("Bucket %v is available.\n", bucketName)
-				exists = false
-				err = nil
+				log.Printf("Bucket 'textvault' is available.\n")
+				return nil
 			default:
-				log.Printf("Either you don't have access to bucket %v or another error occurred. "+
-					"Here's what happened: %v\n", bucketName, err)
+				log.Printf("Either you don't have access to bucket 'textvault' or another error occurred. "+
+					"Here's what happened: %v\n", err)
 			}
 		}
-	} else {
-		log.Printf("Bucket %v exists and you already own it.", bucketName)
 	}
 
-	return exists, err
+	return err
+}
+
+func (c *CloudStorage) UploadPaste(ctx context.Context, objectKey string, content []byte) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	contentBuffer := bytes.NewBuffer(content)
+
+	_, err := c.S3Client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String("textvault"),
+		Key:    aws.String(objectKey),
+		Body:   contentBuffer,
+	})
+
+	if err != nil {
+		var apiError smithy.APIError
+		if errors.As(err, &apiError) && apiError.ErrorCode() == ErrEntityTooLarge {
+			log.Printf("Error while uploading object to 'textvault'. The object is too large.\n" +
+				"To upload objects larger than 5GB, use the S3 console (160GB max)\n" +
+				"or the multipart upload API (5TB max).")
+		} else {
+			log.Printf("Couldn't upload file %v to 'textvault':%v. Here's why: %v\n",
+				objectKey, objectKey, err)
+		}
+
+	} else {
+		err = s3.NewObjectExistsWaiter(c.S3Client).Wait(
+			ctx, &s3.HeadObjectInput{
+				Bucket: aws.String("textvault"),
+				Key:    aws.String(objectKey),
+			},
+			time.Minute)
+		if err != nil {
+			log.Printf("Failed attempt to wait for object %s to exist.\n", objectKey)
+		}
+	}
+
+	return err
 }
