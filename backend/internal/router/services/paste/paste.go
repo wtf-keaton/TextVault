@@ -32,9 +32,9 @@ func (s *Service) SavePaste(c *fiber.Ctx) error {
 	tokenString, err := middleware.ExtractToken(c)
 
 	var AuthorID int64 = 0
-	if err != nil {
+	if err == nil {
 		userID, err := middleware.GetUserIDFromToken(tokenString)
-		if err != nil {
+		if err == nil {
 			AuthorID = userID
 		}
 	}
