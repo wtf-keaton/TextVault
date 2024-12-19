@@ -1,7 +1,6 @@
 package paste
 
 import (
-	"TextVault/internal/lib/jwt"
 	"TextVault/internal/middleware"
 	"TextVault/internal/storage/models"
 	"TextVault/pkg/random"
@@ -32,22 +31,12 @@ func New(pasteSaver PasteSaver, pasteGetter PasteGetter) *Service {
 func (s *Service) SavePaste(c *fiber.Ctx) error {
 	tokenString, err := middleware.ExtractToken(c)
 
-	// TODO: Refactor this shit
 	var AuthorID int64 = 0
 	if err != nil {
-		AuthorID = 0
-	} else {
-		token, err := jwt.ValidateToken(tokenString)
+		userID, err := middleware.GetUserIDFromToken(tokenString)
 		if err != nil {
-			return fiber.NewError(fiber.StatusUnauthorized, "invalid token")
+			AuthorID = userID
 		}
-
-		claims, err := jwt.ExtractUserClaims(token)
-		if err != nil {
-			return fiber.NewError(fiber.StatusUnauthorized, "invalid token claims")
-		}
-
-		AuthorID = claims.ID
 	}
 
 	pasteHash := random.String(16)

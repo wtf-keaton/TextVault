@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"TextVault/internal/lib/jwt"
 	"errors"
 
 	"github.com/gofiber/fiber/v2"
@@ -25,4 +26,18 @@ func ExtractToken(c *fiber.Ctx) (string, error) {
 	tokenString := authHeader[7:]
 
 	return tokenString, nil
+}
+
+func GetUserIDFromToken(tokenString string) (int64, error) {
+	token, err := jwt.ValidateToken(tokenString)
+	if err != nil {
+		return 0, err
+	}
+
+	claims, err := jwt.ExtractUserClaims(token)
+	if err != nil {
+		return 0, err
+	}
+
+	return claims.ID, nil
 }
