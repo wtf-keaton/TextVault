@@ -42,6 +42,7 @@ type PasteGetter interface {
 
 // pasteBody is a struct that represents the request body for saving a new paste.
 type pasteBody struct {
+	Title   string `json:"title"`
 	Content string `json:"content"`
 }
 
@@ -61,14 +62,8 @@ func New(log *slog.Logger, pasteSaver PasteSaver, pasteGetter PasteGetter, paste
 // body contains the hash of the saved paste.
 func (s *Service) SavePaste(c *fiber.Ctx) error {
 	const prefix = "internal.router.services.paste.SavePaste"
-	title := c.FormValue("title")
 
 	tokenString, err := middleware.ExtractToken(c)
-	log := s.log.With(
-		slog.String("op", prefix),
-		slog.String("title", title),
-	)
-	log.Info("Attempting to save paste")
 
 	p := new(pasteBody)
 
@@ -80,9 +75,16 @@ func (s *Service) SavePaste(c *fiber.Ctx) error {
 		})
 	}
 
+	log := s.log.With(
+		slog.String("op", prefix),
+		slog.String("title", p.Title),
+	)
+
+	log.Info("Attempting to save paste")
+
 	log.Debug("Paste content", slog.String("content", p.Content))
 
-	var AuthorID int64 = -1
+	var AuthorID int64 = 0
 	if err == nil {
 		userID, err := middleware.GetUserIDFromToken(tokenString)
 		if err == nil {
@@ -94,12 +96,12 @@ func (s *Service) SavePaste(c *fiber.Ctx) error {
 	}
 
 	pasteHash := random.String(16)
-	log.Info("Saving paste", slog.String("hash", pasteHash), slog.String("title", title))
+	log.Info("Saving paste", slog.String("hash", pasteHash), slog.String("title", p.Title))
 
 	pasteModel := &models.Paste{
-		Title:    title,
+		Title:    p.Title,
 		Hash:     pasteHash,
-		AuthorID: AuthorID, // If token is not valid, AuthorID will be -1
+		AuthorID: AuthorID, // If token is not valid, AuthorID will be 0
 	}
 
 	err = s.pasteSaver.SavePaste(c.Context(), pasteModel, []byte(p.Content))
@@ -147,7 +149,7 @@ func (s *Service) GetPaste(c *fiber.Ctx) error {
 		if errors.Is(err, storage.ErrPasteNotFound) {
 			s.log.Warn("Failed to find paste")
 
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "paste not found",
 			})
 		}
@@ -250,6 +252,12 @@ func (s *Service) DeletePaste(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusOK)
 }
 
+// GetPastesByUser retrieves all pastes created by a specific user from the database.
+// It requires a valid authorization token to authenticate the user and extract their user ID.
+// If the token is invalid or missing, it returns a 401 Unauthorized status with an error message.
+// If the user does not have any pastes, it returns a 401 Unauthorized status with a specific error message.
+// If any other error occurs during retrieval, it returns a 500 Internal Server Error status with an error message.
+// On successful retrieval, it returns a 200 OK status with the pastes in the response.
 func (s *Service) GetPastesByUser(c *fiber.Ctx) error {
 	const prefix = "internal.router.services.paste.GetPastesByUser"
 	tokenString, err := middleware.ExtractToken(c)

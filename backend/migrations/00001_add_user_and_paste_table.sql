@@ -17,8 +17,7 @@ CREATE TABLE Pastes (
     ID SERIAL PRIMARY KEY,
     Title VARCHAR(255) NOT NULL,
     Hash VARCHAR(64) UNIQUE NOT NULL,
-    AuthorID BIGINT NOT NULL,
-    FOREIGN KEY (AuthorID) REFERENCES Users(ID)
+    AuthorID SERIAL NOT NULL
 );
 
 CREATE INDEX idx_paste_title ON Pastes (Title);

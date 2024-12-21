@@ -45,9 +45,10 @@ func (r *Router) setupRoutes() {
 	userApi.Get("/validate", r.UserService.ValidateToken)
 
 	pasteApi := api.Group("/paste")
-	pasteApi.Post("/save", r.PasteService.SavePaste)
-	pasteApi.Get("/get/:hash", r.PasteService.GetPaste)
-	pasteApi.Delete("/delete/:hash", r.PasteService.DeletePaste)
+	pasteApi.Post("/", r.PasteService.SavePaste)
+	pasteApi.Get("/:hash", r.PasteService.GetPaste)
+	pasteApi.Delete("/:hash", r.PasteService.DeletePaste)
+	// TODO: Refactor this method
 	pasteApi.Get("/user", r.PasteService.GetPastesByUser)
 }
 
