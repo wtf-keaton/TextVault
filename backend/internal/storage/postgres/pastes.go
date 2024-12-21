@@ -46,8 +46,23 @@ func (s *Storage) SavePaste(ctx context.Context, paste *models.Paste, content []
 	return nil
 }
 
-func (s *Storage) GetPastesByUser(ctx context.Context, userID int64) ([]*models.Paste, error) {
-	return nil, nil
+func (s *Storage) GetPastesByUser(ctx context.Context, userID int64) ([]models.Paste, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
+
+	stmt := "SELECT ID, title, hash, authorid FROM Pastes WHERE authorid = $1"
+
+	var pastes []models.Paste
+	err := pgxscan.Select(ctx, s.conn, &pastes, stmt, userID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return []models.Paste{}, storage.ErrUserDontHavePastes
+		}
+
+		return nil, err
+	}
+
+	return pastes, nil
 }
 
 func (s *Storage) DeletePaste(ctx context.Context, hash string) error {

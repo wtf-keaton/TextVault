@@ -48,7 +48,7 @@ func (r *Router) setupRoutes() {
 	pasteApi.Post("/save", r.PasteService.SavePaste)
 	pasteApi.Get("/get/:hash", r.PasteService.GetPaste)
 	pasteApi.Delete("/delete/:hash", r.PasteService.DeletePaste)
-
+	pasteApi.Get("/user", r.PasteService.GetPastesByUser)
 }
 
 func (r *Router) MustRun() {

@@ -37,6 +37,7 @@ type PasteProvider interface {
 // PasteGetter is an interface that provides methods for getting pastes from the database.
 type PasteGetter interface {
 	GetPaste(ctx context.Context, hash string) (models.Paste, error)
+	GetPastesByUser(ctx context.Context, userID int64) ([]models.Paste, error)
 }
 
 // pasteBody is a struct that represents the request body for saving a new paste.
@@ -247,4 +248,48 @@ func (s *Service) DeletePaste(c *fiber.Ctx) error {
 	}
 
 	return c.SendStatus(fiber.StatusOK)
+}
+
+func (s *Service) GetPastesByUser(c *fiber.Ctx) error {
+	const prefix = "internal.router.services.paste.GetPastesByUser"
+	tokenString, err := middleware.ExtractToken(c)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "unauthorized",
+		})
+	}
+
+	userID, err := middleware.GetUserIDFromToken(tokenString)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "unauthorized",
+		})
+	}
+
+	log := s.log.With(
+		slog.String("op", prefix),
+		slog.Int64("user_id", userID),
+	)
+
+	log.Info("Attempting to get pastes by user")
+
+	pastes, err := s.pasteGetter.GetPastesByUser(c.Context(), userID)
+	if err != nil {
+		if errors.Is(err, storage.ErrUserDontHavePastes) {
+			s.log.Warn("Failed to find pastes")
+
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "user dont have pastes",
+			})
+		}
+
+		s.log.Error("Failed to get pastes", sl.Err(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"pastes": pastes,
+	})
 }
