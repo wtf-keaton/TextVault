@@ -4,7 +4,9 @@ CREATE TABLE "User" (
     Username VARCHAR(50) NOT NULL,
     Email VARCHAR(100) UNIQUE NOT NULL,
     PasswordHash VARCHAR(255) NOT NULL,
-
+    IsAdmin BOOLEAN NOT NULL DEFAULT FALSE,
+    IsBanned BOOLEAN NOT NULL DEFAULT FALSE,
+    
     UNIQUE (Username, Email)
 );
 

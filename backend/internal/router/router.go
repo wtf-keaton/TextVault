@@ -4,28 +4,32 @@ import (
 	"TextVault/internal/router/services/paste"
 	"TextVault/internal/router/services/user"
 	"TextVault/internal/storage/postgres"
-	"log"
+	"fmt"
+	"log/slog"
 
 	"github.com/gofiber/fiber/v2"
 )
 
 type Router struct {
 	app *fiber.App
+	log *slog.Logger
 
 	UserService  *user.Service
 	PasteService *paste.Service
 }
 
-func New(storage *postgres.Storage) *Router {
+func New(storage *postgres.Storage, log *slog.Logger) *Router {
 	app := fiber.New(fiber.Config{
-		AppName: "TextVault API",
+		AppName:               "TextVault API",
+		DisableStartupMessage: true,
 	})
 
-	userService := user.New(storage, storage)
-	pasteService := paste.New(storage, storage)
+	userService := user.New(log, storage, storage)
+	pasteService := paste.New(log, storage, storage)
 
 	return &Router{
 		app:          app,
+		log:          log,
 		UserService:  userService,
 		PasteService: pasteService,
 	}
@@ -42,17 +46,22 @@ func (r *Router) setupRoutes() {
 
 func (r *Router) MustRun() {
 	const prefix = "internal.router.MustRun"
+	log := r.log.With(
+		slog.String("op", prefix),
+	)
 
-	log.Println(prefix, ": Setupping routes")
+	log.Info("Setupping routes")
 
 	r.setupRoutes()
 
-	log.Println(prefix, ": Starting router")
+	log.Info("Starting router")
 	if err := r.run(); err != nil {
 		panic(err)
 	}
 }
 
 func (r *Router) run() error {
+	fmt.Println("Server started on port 8080")
+
 	return r.app.Listen(":8080")
 }

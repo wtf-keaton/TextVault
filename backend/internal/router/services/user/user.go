@@ -2,11 +2,14 @@ package user
 
 import (
 	"TextVault/internal/lib/jwt"
+	"TextVault/internal/lib/log/sl"
 	"TextVault/internal/middleware"
+	"TextVault/internal/storage"
 	"TextVault/internal/storage/models"
 	"TextVault/pkg/passwordhash"
 	"context"
-	"log"
+	"errors"
+	"log/slog"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -14,6 +17,7 @@ import (
 type Service struct {
 	userSaver  UserSaver
 	userGetter UserProvider
+	log        *slog.Logger
 }
 
 type UserSaver interface {
@@ -35,10 +39,11 @@ type registerRequest struct {
 	Password string `json:"p"`
 }
 
-func New(userSaver UserSaver, userGetter UserProvider) *Service {
+func New(log *slog.Logger, userSaver UserSaver, userGetter UserProvider) *Service {
 	return &Service{
 		userSaver:  userSaver,
 		userGetter: userGetter,
+		log:        log,
 	}
 }
 
@@ -48,9 +53,19 @@ func (s *Service) Login(c *fiber.Ctx) error {
 	p := new(loginRequest)
 
 	if err := c.BodyParser(p); err != nil {
-		log.Fatalln(prefix, ": Failed to parse login request: ", err)
-		return err
+		s.log.Error("Failed to parse login request", sl.Err(err))
+
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "email/username/password is required",
+		})
 	}
+
+	log := s.log.With(
+		slog.String("op", prefix),
+		slog.String("username", p.Username),
+	)
+
+	log.Info("Attempting to login user")
 
 	if len(p.Password) == 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -60,19 +75,34 @@ func (s *Service) Login(c *fiber.Ctx) error {
 
 	user, err := s.userGetter.GetUser(c.Context(), p.Username)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "user not found",
+		if errors.Is(err, storage.ErrUserNotFound) {
+			s.log.Warn("Failed to find user")
+
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "user not found",
+			})
+		}
+
+		s.log.Error("Failed to get user", sl.Err(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Internal server error",
 		})
 	}
 
 	if !passwordhash.Validate(p.Password, user.PasswordHash) {
+		s.log.Info("invalid credentials")
+
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": "invalid credentials",
 		})
 	}
 
+	log.Info("Successfully logged in user")
+
 	token, err := jwt.NewToken(user)
 	if err != nil {
+		s.log.Error("failed to generate token", sl.Err(err))
+
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "failed to create token",
 		})
@@ -85,12 +115,18 @@ func (s *Service) Login(c *fiber.Ctx) error {
 
 func (s *Service) Register(c *fiber.Ctx) error {
 	const prefix = "internal.router.services.user.Register"
+
 	p := new(registerRequest)
 
 	if err := c.BodyParser(p); err != nil {
-		log.Fatalln(prefix, ": Failed to parse register request: ", err)
+		s.log.Error("Failed to parse register request", sl.Err(err))
 		return err
 	}
+
+	log := s.log.With(
+		slog.String("op", prefix),
+		slog.String("username", p.Username),
+	)
 
 	if len(p.Password) == 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -100,7 +136,7 @@ func (s *Service) Register(c *fiber.Ctx) error {
 
 	passwordHash, err := passwordhash.New(p.Password)
 	if err != nil {
-		log.Fatalln(prefix, ": Failed to hash password: ", err)
+		log.Error("Failed to hash password", sl.Err(err))
 
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Internal server error",
@@ -109,6 +145,8 @@ func (s *Service) Register(c *fiber.Ctx) error {
 
 	id, err := s.userSaver.SaveUser(c.Context(), p.Username, p.Mail, passwordHash)
 	if err != nil {
+		log.Error("failed to save user", sl.Err(err))
+
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "failed to save user",
 		})

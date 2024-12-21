@@ -5,4 +5,6 @@ type User struct {
 	Username     string
 	Email        string
 	PasswordHash string
+	IsAdmin      bool
+	IsBanned     bool
 }

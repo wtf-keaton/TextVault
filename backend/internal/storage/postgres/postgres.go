@@ -1,9 +1,10 @@
 package postgres
 
 import (
-	"TextVault/internal/storage/cloud"
+	"TextVault/internal/config"
 	"context"
-	"os"
+	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,18 +12,18 @@ import (
 
 type Storage struct {
 	conn    *pgxpool.Pool
-	s3cloud *cloud.CloudStorage
-
 	timeout time.Duration
 }
 
 // New returns a new Storage instance based on the DATABASE_URL environment
 // variable. The function will panic if the environment variable is not set or
 // if the connection to the database cannot be established.
-func New(cloudStorage *cloud.CloudStorage, ctx context.Context) (*Storage, error) {
+func New(ctx context.Context, log *slog.Logger, cfg *config.PostgresConfig) (*Storage, error) {
 	const timeout = 5 * time.Second
 
-	poolConfig, err := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
+	log.Debug("Connecting to database", "dsn", dsn)
+	poolConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +35,6 @@ func New(cloudStorage *cloud.CloudStorage, ctx context.Context) (*Storage, error
 
 	return &Storage{
 		conn:    conn,
-		s3cloud: cloudStorage,
 		timeout: timeout,
 	}, nil
 }

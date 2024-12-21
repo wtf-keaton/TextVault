@@ -1,0 +1,10 @@
+env: "local"
+tokenKey: "secretkey"
+postgres:
+  host: "localhost"
+  port: "5432"
+  user: "postgres"
+  password: "test-password"
+  database: "textvault"
+s3:
+  bucket: "textvault"

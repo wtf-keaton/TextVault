@@ -10,6 +10,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// SaveUser creates a new user in the database and returns the ID of the newly created user.
+// If any error occurs during the execution of the function, it is wrapped in a custom error
+// with the prefix "storage.postgresql.SaveUser" and returned.
+// The context is used to set a timeout for the execution of the function, which is set to the
+// value of the timeout field of the receiver.
 func (s *Storage) SaveUser(ctx context.Context, username, email, password string) (int64, error) {
 	const prefix = "storage.postgresql.SaveUser"
 
@@ -27,6 +32,10 @@ func (s *Storage) SaveUser(ctx context.Context, username, email, password string
 	return id, nil
 }
 
+// GetUser retrieves a User from the database based on the provided username.
+// If the username is not found, the function returns ErrUserNotFound.
+// If any other error occurs, the function returns the error wrapped in a custom error
+// with the prefix "storage.postgresql.GetUser".
 func (s *Storage) GetUser(ctx context.Context, username string) (models.User, error) {
 	const prefix = "storage.postgresql.GetUser"
 

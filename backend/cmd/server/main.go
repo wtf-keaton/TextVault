@@ -1,44 +1,45 @@
 package main
 
 import (
-	"context"
-	"log"
+	"log/slog"
+	"os"
 
-	"TextVault/internal/router"
-	"TextVault/internal/storage/cloud"
-	"TextVault/internal/storage/postgres"
+	"TextVault/internal/app"
+	"TextVault/internal/config"
+	"TextVault/internal/lib/log/sl"
+)
+
+const (
+	envLocal = "local"
+	envProd  = "production"
 )
 
 func main() {
-	ctx := context.Background()
+	cfg := config.MustLoad()
+	log := setupLogger(cfg.Env)
 
-	cloudStorage, err := cloud.New()
+	app, err := app.New(log, cfg)
 	if err != nil {
-		log.Fatalf("Unable to connect to cloud: %v\n", err)
+		log.Error("failed to create app", sl.Err(err))
+		os.Exit(1)
 	}
 
-	log.Println("Connected to s3 storage")
+	app.Router.MustRun()
+}
 
-	if err := cloudStorage.BucketExists(ctx); err != nil {
-		log.Fatalf("Unable to check if bucket exists: %v\n", err)
+func setupLogger(env string) *slog.Logger {
+	var log *slog.Logger
+
+	switch env {
+	case envLocal:
+		log = slog.New(
+			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
+		)
+	case envProd:
+		log = slog.New(
+			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
+		)
 	}
 
-	log.Println("Bucket 'textvault' exists and you already own it")
-
-	storage, err := postgres.New(cloudStorage, ctx)
-	if err != nil {
-		log.Fatalf("Unable to connect to database: %v\n", err)
-	}
-
-	defer storage.Close()
-
-	if err := storage.Ping(ctx); err != nil {
-		log.Fatalf("Unable to ping database: %v\n", err)
-	}
-
-	log.Println("Connected to database")
-
-	route := router.New(storage)
-
-	route.MustRun()
+	return log
 }

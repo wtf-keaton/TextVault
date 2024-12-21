@@ -1,10 +1,13 @@
 package cloud
 
 import (
+	cfg "TextVault/internal/config"
+	"TextVault/internal/lib/log/sl"
 	"bytes"
 	"context"
 	"errors"
-	"log"
+	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -19,10 +22,12 @@ var (
 )
 
 type CloudStorage struct {
-	S3Client *s3.Client
+	S3Client   *s3.Client
+	log        *slog.Logger
+	bucketName string
 }
 
-func New() (*CloudStorage, error) {
+func New(log *slog.Logger, s3config cfg.S3Config) (*CloudStorage, error) {
 	ctx := context.Background()
 
 	sdkConfig, err := config.LoadDefaultConfig(ctx)
@@ -32,12 +37,16 @@ func New() (*CloudStorage, error) {
 
 	s3Client := s3.NewFromConfig(sdkConfig)
 
-	return &CloudStorage{S3Client: s3Client}, nil
+	return &CloudStorage{
+		S3Client:   s3Client,
+		log:        log,
+		bucketName: s3config.BucketName,
+	}, nil
 }
 
 func (c *CloudStorage) BucketExists(ctx context.Context) error {
 	_, err := c.S3Client.HeadBucket(ctx, &s3.HeadBucketInput{
-		Bucket: aws.String("textvault"),
+		Bucket: aws.String(c.bucketName),
 	})
 
 	if err != nil {
@@ -45,11 +54,10 @@ func (c *CloudStorage) BucketExists(ctx context.Context) error {
 		if errors.As(err, &apiError) {
 			switch apiError.(type) {
 			case *types.NotFound:
-				log.Printf("Bucket 'textvault' is available.\n")
+				c.log.Error(fmt.Sprintf("Bucket '%s' is not available.", c.bucketName), sl.Err(err))
 				return nil
 			default:
-				log.Printf("Either you don't have access to bucket 'textvault' or another error occurred. "+
-					"Here's what happened: %v\n", err)
+				c.log.Error(fmt.Sprintf("Either you don't have access to bucket '%s' or another error occurred.", c.bucketName), sl.Err(err))
 			}
 		}
 	}
@@ -63,7 +71,7 @@ func (c *CloudStorage) UploadPaste(ctx context.Context, objectKey string, conten
 	contentBuffer := bytes.NewBuffer(content)
 
 	_, err := c.S3Client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String("textvault"),
+		Bucket: aws.String(c.bucketName),
 		Key:    aws.String(objectKey),
 		Body:   contentBuffer,
 	})
@@ -71,23 +79,23 @@ func (c *CloudStorage) UploadPaste(ctx context.Context, objectKey string, conten
 	if err != nil {
 		var apiError smithy.APIError
 		if errors.As(err, &apiError) && apiError.ErrorCode() == ErrEntityTooLarge {
-			log.Printf("Error while uploading object to 'textvault'. The object is too large.\n" +
-				"To upload objects larger than 5GB, use the S3 console (160GB max)\n" +
-				"or the multipart upload API (5TB max).")
+			c.log.Error(fmt.Sprintf("Error while uploading object to '%v'. The object is too large."+
+				"To upload objects larger than 5GB, use the S3 console (160GB max)"+
+				"or the multipart upload API (5TB max).", c.bucketName))
 		} else {
-			log.Printf("Couldn't upload file %v to 'textvault':%v. Here's why: %v\n",
-				objectKey, objectKey, err)
+			c.log.Error(fmt.Sprintf("Couldn't upload file %v to '%v':%v",
+				c.bucketName, objectKey, objectKey), sl.Err(err))
 		}
 
 	} else {
 		err = s3.NewObjectExistsWaiter(c.S3Client).Wait(
 			ctx, &s3.HeadObjectInput{
-				Bucket: aws.String("textvault"),
+				Bucket: aws.String(c.bucketName),
 				Key:    aws.String(objectKey),
 			},
 			time.Minute)
 		if err != nil {
-			log.Printf("Failed attempt to wait for object %s to exist.\n", objectKey)
+			c.log.Error(fmt.Sprintf("Failed attempt to wait for object %s to exist.", objectKey), sl.Err(err))
 		}
 	}
 
