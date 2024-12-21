@@ -3,6 +3,7 @@ package router
 import (
 	"TextVault/internal/router/services/paste"
 	"TextVault/internal/router/services/user"
+	"TextVault/internal/storage/cloud"
 	"TextVault/internal/storage/postgres"
 	"fmt"
 	"log/slog"
@@ -18,14 +19,14 @@ type Router struct {
 	PasteService *paste.Service
 }
 
-func New(storage *postgres.Storage, log *slog.Logger) *Router {
+func New(storage *postgres.Storage, S3 *cloud.Storage, log *slog.Logger) *Router {
 	app := fiber.New(fiber.Config{
 		AppName:               "TextVault API",
 		DisableStartupMessage: true,
 	})
 
 	userService := user.New(log, storage, storage)
-	pasteService := paste.New(log, storage, storage)
+	pasteService := paste.New(log, storage, storage, S3)
 
 	return &Router{
 		app:          app,
@@ -42,6 +43,12 @@ func (r *Router) setupRoutes() {
 	userApi.Post("/register", r.UserService.Register)
 	userApi.Post("/login", r.UserService.Login)
 	userApi.Get("/validate", r.UserService.ValidateToken)
+
+	pasteApi := api.Group("/paste")
+	pasteApi.Post("/save", r.PasteService.SavePaste)
+	pasteApi.Get("/get/:hash", r.PasteService.GetPaste)
+	pasteApi.Delete("/delete/:hash", r.PasteService.DeletePaste)
+
 }
 
 func (r *Router) MustRun() {

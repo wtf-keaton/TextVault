@@ -21,7 +21,7 @@ func (s *Storage) SaveUser(ctx context.Context, username, email, password string
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	stmt := "INSERT INTO User (name, email, password) VALUES ($1, $2, $3) RETURNING id"
+	stmt := "INSERT INTO Users (username, email, passwordhash) VALUES ($1, $2, $3) RETURNING id"
 
 	var id int64
 	err := s.conn.QueryRow(ctx, stmt, username, email, password).Scan(&id)
@@ -42,10 +42,10 @@ func (s *Storage) GetUser(ctx context.Context, username string) (models.User, er
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
-	stmt := "SELECT id, name, email, password FROM User WHERE name = $1 OR email = $1"
+	stmt := "SELECT ID, username, email, passwordhash FROM Users WHERE username = $1 OR email = $1"
 
 	var user models.User
-	err := pgxscan.Select(ctx, s.conn, &user, stmt, username)
+	err := pgxscan.Get(ctx, s.conn, &user, stmt, username)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return models.User{}, fmt.Errorf("%s: %w", prefix, storage.ErrUserNotFound)

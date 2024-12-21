@@ -33,15 +33,13 @@ func New(log *slog.Logger, cfg *config.Config) (*App, error) {
 		return nil, err
 	}
 
-	defer storage.Close()
-
 	if err := storage.Ping(ctx); err != nil {
 		return nil, err
 	}
 
 	log.Info("Connected to database")
 
-	router := router.New(storage, log)
+	router := router.New(storage, cloudStorage, log)
 	return &App{
 		Router: router,
 		log:    log,
