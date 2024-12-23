@@ -1,8 +1,8 @@
 package router
 
 import (
-	"TextVault/internal/router/services/paste"
-	"TextVault/internal/router/services/user"
+	"TextVault/internal/router/services/account"
+	"TextVault/internal/router/services/pastes"
 	"TextVault/internal/storage/cloud"
 	"TextVault/internal/storage/postgres"
 	"fmt"
@@ -15,8 +15,8 @@ type Router struct {
 	app *fiber.App
 	log *slog.Logger
 
-	UserService  *user.Service
-	PasteService *paste.Service
+	accountService *account.Service
+	pasteService   *pastes.Service
 }
 
 func New(storage *postgres.Storage, S3 *cloud.Storage, log *slog.Logger) *Router {
@@ -25,31 +25,34 @@ func New(storage *postgres.Storage, S3 *cloud.Storage, log *slog.Logger) *Router
 		DisableStartupMessage: true,
 	})
 
-	userService := user.New(log, storage, storage)
-	pasteService := paste.New(log, storage, storage, S3)
+	accountService := account.New(log, storage, storage)
+	pasteService := pastes.New(log, storage, storage, S3)
 
 	return &Router{
-		app:          app,
-		log:          log,
-		UserService:  userService,
-		PasteService: pasteService,
+		app:            app,
+		log:            log,
+		accountService: accountService,
+		pasteService:   pasteService,
 	}
 }
 
+func (r *Router) setupAccountRoutes(app *fiber.App) {
+	accountApi := app.Group("/account")
+	accountApi.Post("/register", r.accountService.Register)
+	accountApi.Post("/login", r.accountService.Login)
+	accountApi.Get("/pastes", r.accountService.GetUserPastes)
+}
+
+func (r *Router) setupPastesRoutes(app *fiber.App) {
+	pasteApi := app.Group("/pastes")
+	pasteApi.Post("/", r.pasteService.SavePaste)
+	pasteApi.Get("/:hash", r.pasteService.GetPaste)
+	pasteApi.Delete("/:hash", r.pasteService.DeletePaste)
+}
+
 func (r *Router) setupRoutes() {
-	api := r.app.Group("/api/v1")
-
-	userApi := api.Group("/user")
-	userApi.Post("/register", r.UserService.Register)
-	userApi.Post("/login", r.UserService.Login)
-	userApi.Get("/validate", r.UserService.ValidateToken)
-
-	pasteApi := api.Group("/paste")
-	pasteApi.Post("/", r.PasteService.SavePaste)
-	pasteApi.Get("/:hash", r.PasteService.GetPaste)
-	pasteApi.Delete("/:hash", r.PasteService.DeletePaste)
-	// TODO: Refactor this method
-	pasteApi.Get("/user", r.PasteService.GetPastesByUser)
+	r.setupAccountRoutes(r.app)
+	r.setupPastesRoutes(r.app)
 }
 
 func (r *Router) MustRun() {

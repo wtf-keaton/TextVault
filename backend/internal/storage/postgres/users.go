@@ -4,7 +4,6 @@ import (
 	"TextVault/internal/storage"
 	"TextVault/internal/storage/models"
 	"context"
-	"fmt"
 
 	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgx/v5"
@@ -16,8 +15,6 @@ import (
 // The context is used to set a timeout for the execution of the function, which is set to the
 // value of the timeout field of the receiver.
 func (s *Storage) SaveUser(ctx context.Context, username, email, password string) (int64, error) {
-	const prefix = "storage.postgresql.SaveUser"
-
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
@@ -26,7 +23,7 @@ func (s *Storage) SaveUser(ctx context.Context, username, email, password string
 	var id int64
 	err := s.conn.QueryRow(ctx, stmt, username, email, password).Scan(&id)
 	if err != nil {
-		return 0, fmt.Errorf("%s: %w", prefix, err)
+		return 0, err
 	}
 
 	return id, nil
@@ -37,8 +34,6 @@ func (s *Storage) SaveUser(ctx context.Context, username, email, password string
 // If any other error occurs, the function returns the error wrapped in a custom error
 // with the prefix "storage.postgresql.GetUser".
 func (s *Storage) GetUser(ctx context.Context, username string) (models.User, error) {
-	const prefix = "storage.postgresql.GetUser"
-
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
@@ -48,13 +43,32 @@ func (s *Storage) GetUser(ctx context.Context, username string) (models.User, er
 	err := pgxscan.Get(ctx, s.conn, &user, stmt, username)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return models.User{}, fmt.Errorf("%s: %w", prefix, storage.ErrUserNotFound)
+			return models.User{}, storage.ErrUserNotFound
 		}
 
-		return models.User{}, fmt.Errorf("%s: %w", prefix, err)
+		return models.User{}, err
 	}
 
 	return user, nil
+}
+
+func (s *Storage) GetUserPastes(ctx context.Context, userID int64) ([]models.Paste, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
+
+	stmt := "SELECT ID, title, hash, language, authorid FROM Pastes WHERE authorid = $1"
+
+	var pastes []models.Paste
+	err := pgxscan.Select(ctx, s.conn, &pastes, stmt, userID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return []models.Paste{}, storage.ErrUserDontHavePastes
+		}
+
+		return nil, err
+	}
+
+	return pastes, nil
 }
 
 func (s *Storage) UpdateUser(ctx context.Context, user *models.User) error {

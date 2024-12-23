@@ -1,4 +1,4 @@
-package paste
+package pastes
 
 import (
 	"TextVault/internal/lib/jwt"
@@ -37,13 +37,13 @@ type PasteProvider interface {
 // PasteGetter is an interface that provides methods for getting pastes from the database.
 type PasteGetter interface {
 	GetPaste(ctx context.Context, hash string) (models.Paste, error)
-	GetPastesByUser(ctx context.Context, userID int64) ([]models.Paste, error)
 }
 
 // pasteBody is a struct that represents the request body for saving a new paste.
 type pasteBody struct {
-	Title   string `json:"title"`
-	Content string `json:"content"`
+	Title    string `json:"title"`
+	Language string `json:"language"`
+	Content  string `json:"content"`
 }
 
 // New creates a new paste service.
@@ -101,6 +101,7 @@ func (s *Service) SavePaste(c *fiber.Ctx) error {
 	pasteModel := &models.Paste{
 		Title:    p.Title,
 		Hash:     pasteHash,
+		Language: p.Language,
 		AuthorID: AuthorID, // If token is not valid, AuthorID will be 0
 	}
 
@@ -169,7 +170,10 @@ func (s *Service) GetPaste(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.SendString(string(content))
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"language": paste.Language,
+		"content":  string(content),
+	})
 }
 
 // DeletePaste deletes a paste from the database and s3 storage based on the provided hash.
@@ -231,6 +235,7 @@ func (s *Service) DeletePaste(c *fiber.Ctx) error {
 		})
 	}
 
+	// @NOTE: Delete paste from db
 	err = s.pasteSaver.DeletePaste(c.Context(), hash)
 	if err != nil {
 		log.Error("Failed to delete paste", sl.Err(err))
@@ -240,6 +245,7 @@ func (s *Service) DeletePaste(c *fiber.Ctx) error {
 		})
 	}
 
+	// @NOTE: Delete paste from s3
 	err = s.pasteProvider.DeletePaste(c.Context(), hash)
 	if err != nil {
 		log.Error("Failed to delete paste from s3 storage", sl.Err(err))
@@ -250,54 +256,4 @@ func (s *Service) DeletePaste(c *fiber.Ctx) error {
 	}
 
 	return c.SendStatus(fiber.StatusOK)
-}
-
-// GetPastesByUser retrieves all pastes created by a specific user from the database.
-// It requires a valid authorization token to authenticate the user and extract their user ID.
-// If the token is invalid or missing, it returns a 401 Unauthorized status with an error message.
-// If the user does not have any pastes, it returns a 401 Unauthorized status with a specific error message.
-// If any other error occurs during retrieval, it returns a 500 Internal Server Error status with an error message.
-// On successful retrieval, it returns a 200 OK status with the pastes in the response.
-func (s *Service) GetPastesByUser(c *fiber.Ctx) error {
-	const prefix = "internal.router.services.paste.GetPastesByUser"
-	tokenString, err := middleware.ExtractToken(c)
-	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "unauthorized",
-		})
-	}
-
-	userID, err := middleware.GetUserIDFromToken(tokenString)
-	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "unauthorized",
-		})
-	}
-
-	log := s.log.With(
-		slog.String("op", prefix),
-		slog.Int64("user_id", userID),
-	)
-
-	log.Info("Attempting to get pastes by user")
-
-	pastes, err := s.pasteGetter.GetPastesByUser(c.Context(), userID)
-	if err != nil {
-		if errors.Is(err, storage.ErrUserDontHavePastes) {
-			s.log.Warn("Failed to find pastes")
-
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "user dont have pastes",
-			})
-		}
-
-		s.log.Error("Failed to get pastes", sl.Err(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Internal server error",
-		})
-	}
-
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"pastes": pastes,
-	})
 }
