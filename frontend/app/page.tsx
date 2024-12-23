@@ -50,7 +50,7 @@ export default function Home() {
     console.log("Generated JSON:", JSON.stringify(jsonData, null, 2));
 
   };
-  const handleEditorChange = (value: string) => {
+  const handleEditorChange = (value: any) => {
     console.log(value);
     setCode(value);
   };
@@ -59,7 +59,7 @@ export default function Home() {
     <section className="flex flex-col items-center justify-center gap-4">
       <div className="inline-block max-w-xl text-center justify-center">
         <span className={title()}>Write your&nbsp;</span>
-        <span className={title({ color: "pink" })}>code&nbsp;</span>
+        <span className={title({ color: "blue" })}>code&nbsp;</span>
       </div>
       <main className="container mx-auto px-4">
         <div className="light:bg-default-100 dark:bg-[#141414] rounded-lg shadow-lg p-6">
@@ -102,7 +102,7 @@ export default function Home() {
               options={{
                 minimap: { enabled: false },
                 lineNumbers: "on",
-                roundedSelection: false,
+                roundedSelection: true,
                 scrollBeyondLastLine: false,
                 readOnly: false,
                 fontSize: 14,
