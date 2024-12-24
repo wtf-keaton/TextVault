@@ -23,7 +23,7 @@ export const siteConfig = {
     github: "https://github.com/wtf-keaton/",
     githubProject: "https://github.com/wtf-keaton/TextVault",
     login: "/login",
-    signup: "/signup",
+    signup: "/register",
     profile: "/my",
   },
 };

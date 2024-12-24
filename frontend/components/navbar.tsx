@@ -8,9 +8,7 @@ import {
   NavbarMenuItem,
 } from "@nextui-org/navbar";
 import { Button } from "@nextui-org/button";
-import { Kbd } from "@nextui-org/kbd";
 import { Link } from "@nextui-org/link";
-import { Input } from "@nextui-org/input";
 import { link as linkStyles } from "@nextui-org/theme";
 import NextLink from "next/link";
 import clsx from "clsx";
@@ -19,7 +17,6 @@ import { siteConfig } from "@/config/site";
 import { ThemeSwitch } from "@/components/theme-switch";
 import {
   GithubIcon,
-  HeartFilledIcon,
   Logo,
 } from "@/components/icons";
 
@@ -63,10 +60,9 @@ export const Navbar = () => {
         </NavbarItem>
         <NavbarItem className="hidden md:flex">
           <Button
-            isExternal
             as={Link}
             className="text-sm font-normal text-default-600"
-            href={siteConfig.links.login}
+            href={siteConfig.links.signup}
             variant="light"
           >
             Sign up
@@ -74,7 +70,6 @@ export const Navbar = () => {
         </NavbarItem>
         <NavbarItem className="hidden md:flex">
           <Button
-            isExternal
             as={Link}
             className="text-sm font-normal text-default-600"
             href={siteConfig.links.login}
