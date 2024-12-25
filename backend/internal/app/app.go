@@ -41,7 +41,6 @@ func New(log *slog.Logger, cfg *config.Config) (*App, error) {
 	log.Info("Connected to database")
 
 	redisStorage := redis.New(&cfg.Redis)
-	defer redisStorage.Close()
 
 	if err := redisStorage.Ping(ctx); err != nil {
 		return nil, err

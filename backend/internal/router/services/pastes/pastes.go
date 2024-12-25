@@ -46,6 +46,7 @@ type CacheProvider interface {
 	Set(ctx context.Context, key string, value string) error
 	Get(ctx context.Context, key string) (string, error)
 	Delete(ctx context.Context, key string) error
+	Exists(ctx context.Context, key string) error
 }
 
 // pasteBody is a struct that represents the request body for saving a new paste.
@@ -171,7 +172,7 @@ func (s *Service) GetPaste(c *fiber.Ctx) error {
 			})
 		}
 
-		log.Info("Paste retrieved successfully", slog.String("hash", hash))
+		log.Info("Paste cache retrieved successfully", slog.String("hash", hash))
 
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"title":    pasteResponse.Title,
@@ -223,10 +224,12 @@ func (s *Service) GetPaste(c *fiber.Ctx) error {
 		})
 	}
 
-	err = s.cacheProvider.Set(c.Context(), paste.Hash, string(cacheData))
-	if err != nil {
-		log.Error("Failed to set cache", sl.Err(err))
-	}
+	go func() {
+		err = s.cacheProvider.Set(c.Context(), paste.Hash, string(cacheData))
+		if err != nil {
+			log.Error("Failed to set cache", sl.Err(err))
+		}
+	}()
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"language": paste.Language,
@@ -311,6 +314,10 @@ func (s *Service) DeletePaste(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "failed to delete paste",
 		})
+	}
+
+	if err := s.cacheProvider.Exists(c.Context(), hash); err == nil {
+		_ = s.cacheProvider.Delete(c.Context(), hash)
 	}
 
 	return c.SendStatus(fiber.StatusOK)

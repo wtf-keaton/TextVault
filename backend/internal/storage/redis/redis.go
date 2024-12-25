@@ -42,3 +42,7 @@ func (s *Storage) Get(ctx context.Context, key string) (string, error) {
 func (s *Storage) Delete(ctx context.Context, key string) error {
 	return s.rdb.Del(ctx, key).Err()
 }
+
+func (s *Storage) Exists(ctx context.Context, key string) error {
+	return s.rdb.Exists(ctx, key).Err()
+}
