@@ -8,3 +8,8 @@ postgres:
   database: "textvault"
 s3:
   bucket: "textvault"
+redis:
+  host: "localhost"
+  port: "6379"
+  password: "test-password"
+  db: 0

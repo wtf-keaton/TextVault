@@ -13,6 +13,7 @@ type Config struct {
 	Env      string         `yaml:"env" env-default:"local"`
 	Postgres PostgresConfig `yaml:"postgres"`
 	S3       S3Config       `yaml:"s3"`
+	Redis    RedisConfig    `yaml:"redis"`
 	TokenKey string         `yaml:"tokenKey" env-default:"secret_key"`
 }
 
@@ -26,6 +27,13 @@ type PostgresConfig struct {
 
 type S3Config struct {
 	BucketName string `yaml:"bucketName" env-default:"textvault"`
+}
+
+type RedisConfig struct {
+	Host     string `yaml:"host"`
+	Port     string `yaml:"port"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
 }
 
 func MustLoad() *Config {

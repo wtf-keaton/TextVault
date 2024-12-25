@@ -8,6 +8,7 @@ import (
 	"TextVault/internal/storage/models"
 	"TextVault/pkg/random"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 
@@ -18,7 +19,9 @@ type Service struct {
 	pasteSaver    PasteSaver
 	pasteGetter   PasteGetter
 	pasteProvider PasteProvider
-	log           *slog.Logger
+	cacheProvider CacheProvider
+
+	log *slog.Logger
 }
 
 // PasteSaver is an interface that provides methods for saving and deleting pastes to the database.
@@ -39,6 +42,12 @@ type PasteGetter interface {
 	GetPaste(ctx context.Context, hash string) (models.Paste, error)
 }
 
+type CacheProvider interface {
+	Set(ctx context.Context, key string, value string) error
+	Get(ctx context.Context, key string) (string, error)
+	Delete(ctx context.Context, key string) error
+}
+
 // pasteBody is a struct that represents the request body for saving a new paste.
 type pasteBody struct {
 	Title    string `json:"title"`
@@ -47,11 +56,17 @@ type pasteBody struct {
 }
 
 // New creates a new paste service.
-func New(log *slog.Logger, pasteSaver PasteSaver, pasteGetter PasteGetter, pasteProvider PasteProvider) *Service {
+func New(log *slog.Logger,
+	pasteSaver PasteSaver,
+	pasteGetter PasteGetter,
+	pasteProvider PasteProvider,
+	cacheProvider CacheProvider,
+) *Service {
 	return &Service{
 		pasteSaver:    pasteSaver,
 		pasteGetter:   pasteGetter,
 		pasteProvider: pasteProvider,
+		cacheProvider: cacheProvider,
 		log:           log,
 	}
 }
@@ -145,6 +160,26 @@ func (s *Service) GetPaste(c *fiber.Ctx) error {
 
 	log.Info("Attempting to get paste")
 
+	cacheContent, err := s.cacheProvider.Get(c.Context(), hash)
+	if err == nil {
+		pasteResponse := pasteBody{}
+
+		err := json.Unmarshal([]byte(cacheContent), &pasteResponse)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Internal server error",
+			})
+		}
+
+		log.Info("Paste retrieved successfully", slog.String("hash", hash))
+
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"title":    pasteResponse.Title,
+			"language": pasteResponse.Language,
+			"content":  pasteResponse.Content,
+		})
+	}
+
 	paste, err := s.pasteGetter.GetPaste(c.Context(), hash)
 	if err != nil {
 		if errors.Is(err, storage.ErrPasteNotFound) {
@@ -170,9 +205,32 @@ func (s *Service) GetPaste(c *fiber.Ctx) error {
 		})
 	}
 
+	log.Info("Paste retrieved successfully", slog.String("hash", paste.Hash))
+
+	pasteResponse := pasteBody{
+		Title:    paste.Title,
+		Language: paste.Language,
+		Content:  string(content),
+	}
+
+	var cacheData []byte
+	cacheData, err = json.Marshal(pasteResponse)
+	if err != nil {
+		log.Error("Failed to marshal paste response", sl.Err(err))
+
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Internal server error",
+		})
+	}
+
+	err = s.cacheProvider.Set(c.Context(), paste.Hash, string(cacheData))
+	if err != nil {
+		log.Error("Failed to set cache", sl.Err(err))
+	}
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"language": paste.Language,
-		"content":  string(content),
+		"content":  pasteResponse.Content,
 	})
 }
 

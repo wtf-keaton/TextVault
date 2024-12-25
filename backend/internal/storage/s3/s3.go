@@ -1,4 +1,4 @@
-package cloud
+package s3
 
 import (
 	cfg "TextVault/internal/config"
@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
+	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 )
@@ -23,7 +23,7 @@ var (
 )
 
 type Storage struct {
-	S3Client   *s3.Client
+	S3Client   *awss3.Client
 	log        *slog.Logger
 	bucketName string
 }
@@ -36,7 +36,7 @@ func New(log *slog.Logger, s3config cfg.S3Config) (*Storage, error) {
 		return nil, err
 	}
 
-	s3Client := s3.NewFromConfig(sdkConfig)
+	s3Client := awss3.NewFromConfig(sdkConfig)
 
 	return &Storage{
 		S3Client:   s3Client,
@@ -46,7 +46,7 @@ func New(log *slog.Logger, s3config cfg.S3Config) (*Storage, error) {
 }
 
 func (c *Storage) BucketExists(ctx context.Context) error {
-	_, err := c.S3Client.HeadBucket(ctx, &s3.HeadBucketInput{
+	_, err := c.S3Client.HeadBucket(ctx, &awss3.HeadBucketInput{
 		Bucket: aws.String(c.bucketName),
 	})
 
@@ -71,7 +71,7 @@ func (c *Storage) UploadPaste(ctx context.Context, objectKey string, content []b
 	defer cancel()
 	contentBuffer := bytes.NewBuffer(content)
 
-	_, err := c.S3Client.PutObject(ctx, &s3.PutObjectInput{
+	_, err := c.S3Client.PutObject(ctx, &awss3.PutObjectInput{
 		Bucket: aws.String(c.bucketName),
 		Key:    aws.String(objectKey),
 		Body:   contentBuffer,
@@ -89,8 +89,8 @@ func (c *Storage) UploadPaste(ctx context.Context, objectKey string, content []b
 		}
 
 	} else {
-		err = s3.NewObjectExistsWaiter(c.S3Client).Wait(
-			ctx, &s3.HeadObjectInput{
+		err = awss3.NewObjectExistsWaiter(c.S3Client).Wait(
+			ctx, &awss3.HeadObjectInput{
 				Bucket: aws.String(c.bucketName),
 				Key:    aws.String(objectKey),
 			},
@@ -113,7 +113,7 @@ func (c *Storage) GetPasteContent(ctx context.Context, objectKey string) ([]byte
 	})
 
 	buffer := manager.NewWriteAtBuffer([]byte{})
-	_, err := downloader.Download(ctx, buffer, &s3.GetObjectInput{
+	_, err := downloader.Download(ctx, buffer, &awss3.GetObjectInput{
 		Bucket: aws.String(c.bucketName),
 		Key:    aws.String(objectKey),
 	})
@@ -128,7 +128,7 @@ func (c *Storage) DeletePaste(ctx context.Context, objectKey string) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	_, err := c.S3Client.DeleteObject(ctx, &s3.DeleteObjectInput{
+	_, err := c.S3Client.DeleteObject(ctx, &awss3.DeleteObjectInput{
 		Bucket: aws.String(c.bucketName),
 		Key:    aws.String(objectKey),
 	})

@@ -3,8 +3,9 @@ package app
 import (
 	"TextVault/internal/config"
 	"TextVault/internal/router"
-	"TextVault/internal/storage/cloud"
 	"TextVault/internal/storage/postgres"
+	"TextVault/internal/storage/redis"
+	"TextVault/internal/storage/s3"
 	"context"
 	"log/slog"
 )
@@ -17,14 +18,14 @@ type App struct {
 func New(log *slog.Logger, cfg *config.Config) (*App, error) {
 	ctx := context.Background()
 
-	cloudStorage, err := cloud.New(log, cfg.S3)
+	s3Storage, err := s3.New(log, cfg.S3)
 	if err != nil {
 		return nil, err
 	}
 
 	log.Info("Connected to s3 storage")
 
-	if err := cloudStorage.BucketExists(ctx); err != nil {
+	if err := s3Storage.BucketExists(ctx); err != nil {
 		return nil, err
 	}
 
@@ -39,7 +40,16 @@ func New(log *slog.Logger, cfg *config.Config) (*App, error) {
 
 	log.Info("Connected to database")
 
-	router := router.New(storage, cloudStorage, log)
+	redisStorage := redis.New(&cfg.Redis)
+	defer redisStorage.Close()
+
+	if err := redisStorage.Ping(ctx); err != nil {
+		return nil, err
+	}
+
+	log.Info("Connected to redis")
+
+	router := router.New(storage, redisStorage, s3Storage, log)
 	return &App{
 		Router: router,
 		log:    log,

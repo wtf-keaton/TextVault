@@ -3,8 +3,9 @@ package router
 import (
 	"TextVault/internal/router/services/account"
 	"TextVault/internal/router/services/pastes"
-	"TextVault/internal/storage/cloud"
 	"TextVault/internal/storage/postgres"
+	"TextVault/internal/storage/redis"
+	"TextVault/internal/storage/s3"
 	"fmt"
 	"log/slog"
 
@@ -19,14 +20,18 @@ type Router struct {
 	pasteService   *pastes.Service
 }
 
-func New(storage *postgres.Storage, S3 *cloud.Storage, log *slog.Logger) *Router {
+func New(postgres *postgres.Storage,
+	redis *redis.Storage,
+	S3 *s3.Storage,
+	log *slog.Logger,
+) *Router {
 	app := fiber.New(fiber.Config{
 		AppName:               "TextVault API",
 		DisableStartupMessage: true,
 	})
 
-	accountService := account.New(log, storage, storage)
-	pasteService := pastes.New(log, storage, storage, S3)
+	accountService := account.New(log, postgres, postgres)
+	pasteService := pastes.New(log, postgres, postgres, S3, redis)
 
 	return &Router{
 		app:            app,
