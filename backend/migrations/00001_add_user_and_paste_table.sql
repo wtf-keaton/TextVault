@@ -13,12 +13,13 @@ CREATE TABLE Users (
 CREATE INDEX idx_user_username ON Users (Username);
 CREATE INDEX idx_user_email ON Users (Email);
 
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE TABLE Pastes (
-    ID SERIAL PRIMARY KEY,
+    ID UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     Title VARCHAR(255) NOT NULL,
-    Hash VARCHAR(64) UNIQUE NOT NULL,
     Language VARCHAR(50) NOT NULL,
-    AuthorID SERIAL NOT NULL
+    AuthorID SERIAL -- Can be NULL
 );
 
 CREATE INDEX idx_paste_title ON Pastes (Title);

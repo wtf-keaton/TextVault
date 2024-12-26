@@ -6,7 +6,6 @@ import (
 	"TextVault/internal/middleware"
 	"TextVault/internal/storage"
 	"TextVault/internal/storage/models"
-	"TextVault/pkg/random"
 	"context"
 	"encoding/json"
 	"errors"
@@ -26,8 +25,8 @@ type Service struct {
 
 // PasteSaver is an interface that provides methods for saving and deleting pastes to the database.
 type PasteSaver interface {
-	SavePaste(ctx context.Context, paste *models.Paste, content []byte) error
-	DeletePaste(ctx context.Context, hash string) error
+	SavePaste(ctx context.Context, paste *models.Paste) (string, error)
+	DeletePaste(ctx context.Context, id string) error
 }
 
 // PasteProvider is an interface that provides methods for uploading, downloading, and deleting pastes from s3 storage.
@@ -111,17 +110,15 @@ func (s *Service) SavePaste(c *fiber.Ctx) error {
 		}
 	}
 
-	pasteHash := random.String(16)
-	log.Info("Saving paste", slog.String("hash", pasteHash), slog.String("title", p.Title))
+	log.Info("Saving paste", slog.String("title", p.Title))
 
 	pasteModel := &models.Paste{
 		Title:    p.Title,
-		Hash:     pasteHash,
 		Language: p.Language,
 		AuthorID: AuthorID, // If token is not valid, AuthorID will be 0
 	}
 
-	err = s.pasteSaver.SavePaste(c.Context(), pasteModel, []byte(p.Content))
+	id, err := s.pasteSaver.SavePaste(c.Context(), pasteModel)
 	if err != nil {
 		log.Error("Failed to save paste", sl.Err(err))
 
@@ -130,7 +127,7 @@ func (s *Service) SavePaste(c *fiber.Ctx) error {
 		})
 	}
 
-	err = s.pasteProvider.UploadPaste(c.Context(), pasteHash, []byte(p.Content))
+	err = s.pasteProvider.UploadPaste(c.Context(), id, []byte(p.Content))
 	if err != nil {
 		log.Error("Failed to upload paste", sl.Err(err))
 
@@ -139,10 +136,10 @@ func (s *Service) SavePaste(c *fiber.Ctx) error {
 		})
 	}
 
-	log.Info("Paste saved successfully", slog.String("hash", pasteHash))
+	log.Info("Paste saved successfully", slog.String("id", id))
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"hash": pasteHash,
+		"id": id,
 	})
 }
 
@@ -167,9 +164,7 @@ func (s *Service) GetPaste(c *fiber.Ctx) error {
 
 		err := json.Unmarshal([]byte(cacheContent), &pasteResponse)
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Internal server error",
-			})
+			return s.handleInternalServerError(c, err, log)
 		}
 
 		log.Info("Paste cache retrieved successfully", slog.String("hash", hash))
@@ -191,13 +186,10 @@ func (s *Service) GetPaste(c *fiber.Ctx) error {
 			})
 		}
 
-		s.log.Error("Failed to get paste", sl.Err(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Internal server error",
-		})
+		return s.handleInternalServerError(c, err, log)
 	}
 
-	content, err := s.pasteProvider.GetPasteContent(c.Context(), paste.Hash)
+	content, err := s.pasteProvider.GetPasteContent(c.Context(), hash)
 	if err != nil {
 		log.Error("Failed to get paste content", sl.Err(err))
 
@@ -206,7 +198,7 @@ func (s *Service) GetPaste(c *fiber.Ctx) error {
 		})
 	}
 
-	log.Info("Paste retrieved successfully", slog.String("hash", paste.Hash))
+	log.Info("Paste retrieved successfully", slog.String("id", paste.ID))
 
 	pasteResponse := pasteBody{
 		Title:    paste.Title,
@@ -217,22 +209,17 @@ func (s *Service) GetPaste(c *fiber.Ctx) error {
 	var cacheData []byte
 	cacheData, err = json.Marshal(pasteResponse)
 	if err != nil {
-		log.Error("Failed to marshal paste response", sl.Err(err))
-
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Internal server error",
-		})
+		return s.handleInternalServerError(c, err, log)
 	}
 
-	go func() {
-		err = s.cacheProvider.Set(c.Context(), paste.Hash, string(cacheData))
-		if err != nil {
-			log.Error("Failed to set cache", sl.Err(err))
-		}
-	}()
+	err = s.cacheProvider.Set(c.Context(), hash, string(cacheData))
+	if err != nil {
+		log.Error("Failed to set cache", sl.Err(err))
+	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"language": paste.Language,
+		"title":    pasteResponse.Title,
+		"language": pasteResponse.Language,
 		"content":  pasteResponse.Content,
 	})
 }
@@ -247,23 +234,17 @@ func (s *Service) DeletePaste(c *fiber.Ctx) error {
 
 	tokenString, err := middleware.ExtractToken(c)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "unauthorized",
-		})
+		return s.handleUnauthorizedResponse(c)
 	}
 
 	token, err := jwt.ValidateToken(tokenString)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "unauthorized",
-		})
+		return s.handleUnauthorizedResponse(c)
 	}
 
 	claims, err := jwt.ExtractUserClaims(token)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "unauthorized",
-		})
+		return s.handleUnauthorizedResponse(c)
 	}
 
 	log := s.log.With(
@@ -284,10 +265,7 @@ func (s *Service) DeletePaste(c *fiber.Ctx) error {
 			})
 		}
 
-		s.log.Error("Failed to get paste", sl.Err(err))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Internal server error",
-		})
+		return s.handleInternalServerError(c, err, log)
 	}
 
 	if paste.AuthorID != claims.ID {
@@ -321,4 +299,18 @@ func (s *Service) DeletePaste(c *fiber.Ctx) error {
 	}
 
 	return c.SendStatus(fiber.StatusOK)
+}
+
+func (s *Service) handleInternalServerError(c *fiber.Ctx, err error, log *slog.Logger) error {
+	log.Error("Internal server error", sl.Err(err))
+
+	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+		"error": "Internal server error",
+	})
+}
+
+func (s *Service) handleUnauthorizedResponse(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+		"error": "unauthorized",
+	})
 }
